@@ -1,1 +1,1 @@
-fusermount -u dst 
+fusermount -u $(pwd)/dst
