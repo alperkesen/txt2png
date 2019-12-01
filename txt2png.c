@@ -19,6 +19,7 @@
 
 
 #define FUSE_USE_VERSION 26
+#define TEXT "text"
 
 static const char* rofsVersion = "2008.09.24";
 
@@ -35,7 +36,39 @@ static const char* rofsVersion = "2008.09.24";
 #include <sys/xattr.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <ansilove.h>
 #include <fuse.h>
+#include <magic.h>
+
+
+int is_text(const char *actual_file)
+{
+    const char *magic_full;
+    magic_t magic_cookie;
+
+    magic_cookie = magic_open(MAGIC_MIME);
+
+    if (magic_cookie == NULL) {
+        printf("unable to initialize magic library\n");
+        return 1;
+    }
+
+    if (magic_load(magic_cookie, NULL) != 0) {
+        printf("cannot load magic database - %s\n", magic_error(magic_cookie));
+        magic_close(magic_cookie);
+        return -1;
+    }
+
+    magic_full = magic_file(magic_cookie, actual_file);
+
+    if (strncmp(magic_full, TEXT, strlen(TEXT)) == 0) {
+      magic_close(magic_cookie);
+      return 0;
+    } else {
+      magic_close(magic_cookie);
+      return 1;
+    }
+}
 
 
 // Global to store our read-write path
