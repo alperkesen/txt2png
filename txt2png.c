@@ -63,10 +63,10 @@ int is_text(const char *actual_file)
 
     if (strncmp(magic_full, TEXT, strlen(TEXT)) == 0) {
       magic_close(magic_cookie);
-      return 0;
+      return 1;
     } else {
       magic_close(magic_cookie);
-      return 1;
+      return 0;
     }
 }
 
