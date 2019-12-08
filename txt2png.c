@@ -20,6 +20,7 @@
 
 #define FUSE_USE_VERSION 26
 #define TEXT "text"
+#define ANSI "application/octet-stream"
 
 static const char* rofsVersion = "2008.09.24";
 
@@ -61,7 +62,7 @@ int is_text(const char *actual_file)
 
     magic_full = magic_file(magic_cookie, actual_file);
 
-    if (strncmp(magic_full, TEXT, strlen(TEXT)) == 0) {
+    if (strncmp(magic_full, TEXT, strlen(TEXT)) == 0 || strncmp(magic_full, ANSI, strlen(ANSI)) == 0) {
       magic_close(magic_cookie);
       return 1;
     } else {
