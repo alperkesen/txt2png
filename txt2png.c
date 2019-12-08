@@ -21,6 +21,7 @@
 #define FUSE_USE_VERSION 26
 #define TEXT "text"
 #define ANSI "application/octet-stream"
+#define PNG  ".png"
 
 static const char* rofsVersion = "2008.09.24";
 
@@ -103,7 +104,7 @@ static char *get_pngname(const char *filename) {
 
     strncpy(png_name, filename, (ext - filename));
     png_name[ext - filename] = '\0';
-    strcat(png_name, ".png");
+    strcat(png_name, PNG);
 
     return png_name;
 }
@@ -132,16 +133,24 @@ static char* get_filepath(const char *dirpath, const char* path)
 *
 ******************************/
 
-static int txt2png_getattr(const char *path, struct stat *st_data)
+static int txt2png_getattr(const char *path, struct stat *stbuf)
 {
-    int res;
-    char *upath=translate_path(path);
+    int res = 0;
+    char *upath;
 
-    res = lstat(upath, st_data);
-    free(upath);
-    if(res == -1) {
-        return -errno;
+    if (strncmp(path + strlen(path) - strlen(PNG), PNG, strlen(PNG)) == 0) {
+        stbuf->st_mode = S_IFREG | 0444;
+        stbuf->st_nlink = 1;
+    } else {
+        upath = translate_path(path);
+        res = lstat(upath, stbuf);
+	free(upath);
+
+	if (res == -1) {
+	    return -errno;
+	}
     }
+
     return 0;
 }
 
