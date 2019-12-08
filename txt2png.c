@@ -50,7 +50,7 @@ int is_text(const char *actual_file)
 
     if (magic_cookie == NULL) {
         printf("unable to initialize magic library\n");
-        return 1;
+        return -1;
     }
 
     if (magic_load(magic_cookie, NULL) != 0) {
@@ -77,7 +77,6 @@ char *rw_path;
 // Translate an rofs path into it's underlying filesystem path
 static char* translate_path(const char* path)
 {
-
     char *rPath= malloc(sizeof(char)*(strlen(path)+strlen(rw_path)+1));
 
     strcpy(rPath,rw_path);
@@ -85,6 +84,21 @@ static char* translate_path(const char* path)
         rPath[strlen(rPath)-1]='\0';
     }
     strcat(rPath,path);
+
+    return rPath;
+}
+
+static char* get_filepath(const char *dirpath, const char* path)
+{
+    char *rPath= malloc(sizeof(char) * (strlen(path) + strlen(dirpath) + 2));
+
+    strcpy(rPath, dirpath);
+
+    if (rPath[strlen(rPath)-1] != '/') {
+        strcat(rPath, "/");
+    }
+
+    strcat(rPath, path);
 
     return rPath;
 }
@@ -133,11 +147,12 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
 
     (void) offset;
     (void) fi;
+    char *dirpath=translate_path(path);
 
-    char *upath=translate_path(path);
+    printf("Dirpath: %s\n", dirpath);
 
-    dp = opendir(upath);
-    free(upath);
+    dp = opendir(dirpath);
+
     if(dp == NULL) {
         res = -errno;
         return res;
@@ -148,9 +163,28 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
-        if (filler(buf, de->d_name, &st, 0))
-            break;
+
+	char *filepath = get_filepath(dirpath, de->d_name);
+	printf("Filepath: %s\n", filepath);
+	free(filepath);
+
+	if (st.st_mode == S_IFDIR) {
+	    if (filler(buf, de->d_name, &st, 0)) {
+	        break;
+	    }
+	} else {
+	    char *filepath = get_filepath(dirpath, de->d_name);
+	    int is_textfile = is_text(filepath);
+	    free(filepath);
+
+	    printf("%s is %d (1: text)\n", de->d_name, is_textfile);
+
+	    if (is_textfile == 1 && filler(buf, de->d_name, &st, 0)) {
+	        break;
+	    }
+	}
     }
+    free(dirpath);
 
     closedir(dp);
     return 0;
@@ -266,6 +300,7 @@ static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, 
     (void)finfo;
 
     char *upath=translate_path(path);
+
     fd = open(upath, O_RDONLY);
     free(upath);
     if(fd == -1) {
