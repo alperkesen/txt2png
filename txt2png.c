@@ -88,6 +88,25 @@ static char* translate_path(const char* path)
     return rPath;
 }
 
+static char *get_pngname(const char *filename) {
+    const char *ext;
+    char *png_name;
+
+    ext = strrchr(filename, '.');
+
+    if (!ext) {
+      ext = &filename[strlen(filename)];
+    }
+
+    png_name = malloc(sizeof(char) * (ext - filename + 4));
+
+    strncpy(png_name, filename, (ext - filename));
+    png_name[ext - filename] = '\0';
+    strcat(png_name, ".png");
+
+    return png_name;
+}
+
 static char* get_filepath(const char *dirpath, const char* path)
 {
     char *rPath= malloc(sizeof(char) * (strlen(path) + strlen(dirpath) + 2));
@@ -147,7 +166,7 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
 
     (void) offset;
     (void) fi;
-    char *dirpath=translate_path(path);
+    char *dirpath = translate_path(path);
 
     printf("Dirpath: %s\n", dirpath);
 
@@ -179,8 +198,14 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
 
 	    printf("%s is %d (1: text)\n", de->d_name, is_textfile);
 
-	    if (is_textfile == 1 && filler(buf, de->d_name, &st, 0)) {
-	        break;
+	    if (is_textfile == 1) {
+	        char *png_name = get_pngname(de->d_name);
+
+	        if (filler(buf, png_name, NULL, 0)) {
+		    free(png_name);
+	            break;
+	        }
+		free(png_name);
 	    }
 	}
     }
