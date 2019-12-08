@@ -19,6 +19,7 @@
 #include <ansilove.h>
 #include <fuse.h>
 #include <magic.h>
+#include <ansilove.h>
 
 
 int is_text(const char *actual_file)
@@ -100,6 +101,33 @@ static char* get_filepath(const char *dirpath, const char* path)
     return rPath;
 }
 
+static char *split_dir(const char *path) {
+    char *last_occ;
+    char *dirpath;
+
+    last_occ = strrchr(path, '/');
+    dirpath = malloc(sizeof(char) * (last_occ - path + 2));
+
+    strncpy(dirpath, path, (last_occ - path + 1));
+    dirpath[last_occ - path + 1] = '\0';
+
+    return dirpath;
+}
+
+
+static char *split_filename(const char *path) {
+    char *last_occ;
+    char *filename;
+
+    last_occ = strrchr(path, '/');
+    filename = malloc(sizeof(char) * (path + strlen(path) - last_occ + 1));
+
+    strncpy(filename, last_occ + 1, path + strlen(path) - last_occ);
+    filename[path + strlen(path) - last_occ + 1] = '\0';
+
+    return filename;
+}
+
 
 static int txt2png_getattr(const char *path, struct stat *stbuf)
 {
@@ -132,6 +160,7 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
     (void) offset;
     (void) fi;
     char *dirpath = translate_path(path);
+
 
     printf("Dirpath: %s\n", dirpath);
 
@@ -184,46 +213,122 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
 static int txt2png_open(const char *path, struct fuse_file_info *finfo)
 {
     int res;
-
-    /* We allow opens, unless they're tring to write, sneaky
-     * people.
-     */
     int flags = finfo->flags;
 
     if ((flags & O_WRONLY) || (flags & O_RDWR) || (flags & O_CREAT) || (flags & O_EXCL) || (flags & O_TRUNC) || (flags & O_APPEND)) {
         return -EROFS;
     }
 
-    char *upath=translate_path(path);
+    DIR *dp;
+    struct dirent *de;
+    char *dirname = split_dir(path);
+    char *dirpath = translate_path(dirname);
+    char *filepath;
+    free(dirname);
 
-    res = open(upath, flags);
+    printf("OPEN: Dirpath: %s\n", dirpath);
 
-    free(upath);
-    if(res == -1) {
+    dp = opendir(dirpath);
+
+    if (dp == NULL) {
+        res = -errno;
+        return res;
+    }
+
+    char *fn = split_filename(path);
+
+    while((de = readdir(dp)) != NULL) {
+        if (strncmp(de->d_name, fn, strlen(fn) - strlen(PNG)) == 0) {
+            printf("OPEN: De->d_name: %s, fn: %s\n", de->d_name, fn);
+	    filepath = get_filepath(dirpath, de->d_name);
+	    printf("Filepath: %s\n", filepath);
+	    break;
+        }
+    }
+
+    free(dirpath);
+    closedir(dp);
+
+    if (filepath == NULL) {
         return -errno;
     }
+
+    res = open(filepath, flags);
+    free(filepath);
+
+    if (res == -1) {
+        return -errno;
+    }
+
     close(res);
+
     return 0;
 }
 
 
 static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
 {
+    struct ansilove_ctx ctx;
+    struct ansilove_options options;
+
+    // ansilove_init(&ctx, &options);
+
     int fd;
     int res;
     (void)finfo;
 
-    char *upath=translate_path(path);
+    DIR *dp;
+    struct dirent *de;
+    char *dirname = split_dir(path);
+    char *dirpath = translate_path(dirname);
+    char *filepath;
+    free(dirname);
 
-    fd = open(upath, O_RDONLY);
-    free(upath);
-    if(fd == -1) {
+    printf("READ: Dirpath: %s\n", dirpath);
+
+    dp = opendir(dirpath);
+
+    if (dp == NULL) {
+        res = -errno;
+        return res;
+    }
+
+    char *fn = split_filename(path);
+
+    while ((de = readdir(dp)) != NULL) {
+        if (strncmp(de->d_name, fn, strlen(fn) - strlen(PNG)) == 0) {
+	    filepath = get_filepath(dirpath, de->d_name);
+	    printf("Filepath: %s\n", filepath);
+	    break;
+        }
+    }
+
+    free(dirpath);
+    closedir(dp);
+
+    if (filepath == NULL) {
+        return -errno;
+    }
+
+    // ansilove_loadfile(&ctx, filepath);
+    // ansilove_ansi(&ctx, &options);
+
+    char *upath = translate_path(path);
+
+    // ansilove_savefile(&ctx, upath);
+    // ansilove_clean(&ctx);
+
+
+    fd = open(filepath, O_RDONLY);
+    free(filepath);
+
+    if (fd == -1) {
         res = -errno;
         return res;
     }
     res = pread(fd, buf, size, offset);
 
-    if(res == -1) {
+    if (res == -1) {
         res = -errno;
     }
     close(fd);
