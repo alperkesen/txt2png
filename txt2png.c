@@ -2,6 +2,7 @@
 #define TEXT "text"
 #define ANSI "application/octet-stream"
 #define PNG  ".png"
+#define MAXSIZE  100000
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -137,6 +138,7 @@ static int txt2png_getattr(const char *path, struct stat *stbuf)
     if (strncmp(path + strlen(path) - strlen(PNG), PNG, strlen(PNG)) == 0) {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
+	stbuf->st_size = MAXSIZE;
     } else {
         upath = translate_path(path);
         res = lstat(upath, stbuf);
@@ -161,9 +163,6 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
     (void) fi;
     char *dirpath = translate_path(path);
 
-
-    printf("Dirpath: %s\n", dirpath);
-
     dp = opendir(dirpath);
 
     if(dp == NULL) {
@@ -176,10 +175,6 @@ static int txt2png_readdir(const char *path, void *buf, fuse_fill_dir_t filler,o
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
-
-	char *filepath = get_filepath(dirpath, de->d_name);
-	printf("Filepath: %s\n", filepath);
-	free(filepath);
 
 	if (st.st_mode == S_IFDIR) {
 	    if (filler(buf, de->d_name, &st, 0)) {
@@ -226,8 +221,6 @@ static int txt2png_open(const char *path, struct fuse_file_info *finfo)
     char *filepath;
     free(dirname);
 
-    printf("OPEN: Dirpath: %s\n", dirpath);
-
     dp = opendir(dirpath);
 
     if (dp == NULL) {
@@ -239,9 +232,7 @@ static int txt2png_open(const char *path, struct fuse_file_info *finfo)
 
     while((de = readdir(dp)) != NULL) {
         if (strncmp(de->d_name, fn, strlen(fn) - strlen(PNG)) == 0) {
-            printf("OPEN: De->d_name: %s, fn: %s\n", de->d_name, fn);
 	    filepath = get_filepath(dirpath, de->d_name);
-	    printf("Filepath: %s\n", filepath);
 	    break;
         }
     }
@@ -271,8 +262,6 @@ static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, 
     struct ansilove_ctx ctx;
     struct ansilove_options options;
 
-    // ansilove_init(&ctx, &options);
-
     int fd;
     int res;
     (void)finfo;
@@ -283,8 +272,6 @@ static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, 
     char *dirpath = translate_path(dirname);
     char *filepath;
     free(dirname);
-
-    printf("READ: Dirpath: %s\n", dirpath);
 
     dp = opendir(dirpath);
 
@@ -298,7 +285,6 @@ static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, 
     while ((de = readdir(dp)) != NULL) {
         if (strncmp(de->d_name, fn, strlen(fn) - strlen(PNG)) == 0) {
 	    filepath = get_filepath(dirpath, de->d_name);
-	    printf("Filepath: %s\n", filepath);
 	    break;
         }
     }
@@ -310,29 +296,29 @@ static int txt2png_read(const char *path, char *buf, size_t size, off_t offset, 
         return -errno;
     }
 
-    // ansilove_loadfile(&ctx, filepath);
-    // ansilove_ansi(&ctx, &options);
+    ansilove_init(&ctx, &options);
+
+    ansilove_loadfile(&ctx, filepath);
+    ansilove_ansi(&ctx, &options);
 
     char *upath = translate_path(path);
 
-    // ansilove_savefile(&ctx, upath);
-    // ansilove_clean(&ctx);
+    ansilove_savefile(&ctx, NULL);
 
+    free(upath);
 
-    fd = open(filepath, O_RDONLY);
-    free(filepath);
-
-    if (fd == -1) {
-        res = -errno;
-        return res;
+    if (offset < ctx.png.length) {
+      if (offset + size > ctx.png.length) {
+        size = ctx.png.length - offset;
+      }
+      memcpy(buf, ctx.png.buffer + offset, size);
+    } else {
+      size = 0;
     }
-    res = pread(fd, buf, size, offset);
 
-    if (res == -1) {
-        res = -errno;
-    }
-    close(fd);
-    return res;
+    ansilove_clean(&ctx);
+
+    return size;
 }
 
 
